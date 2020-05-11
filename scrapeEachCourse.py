@@ -131,8 +131,7 @@ def scrape_course(faculty, institute, coursecode):
     return obligatory, recommended
 
 if __name__ == '__main__':
-    #courseData = pd.read_csv('data/courses.csv')
-    courseData = pd.read_pickle('data/courses.pkl')
+    courseData = pd.read_pickle('courses.pkl')
 
     obligatories, recommendeds = [], []
 
