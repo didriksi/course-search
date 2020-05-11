@@ -144,5 +144,4 @@ if __name__ == '__main__':
     courseData['obligatory'] = obligatories
     courseData['recommended'] = recommendeds
 
-    courseData.to_pickle('data/courses.pkl')
-    #courseData.to_csv('data/courses.csv')
+    courseData.to_pickle('courses.pkl')
