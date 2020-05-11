@@ -28,7 +28,7 @@ def text_from_codelist(pretext, codelist, posttext):
     return pretext + text + posttext if text != '' else ''
 
 if __name__ == '__main__':
-    courseData = pd.read_pickle('data/courses.pkl')
+    courseData = pd.read_pickle('courses.pkl')
 
     print('Skriv inn en emnekode du vil se hva slags muligheter gir senere. Hvis det blir litt mye tekst kan du skrive \"-\" rett etter emnekoden. Da får du liste med litt mindre info.')
 
@@ -64,7 +64,3 @@ if __name__ == '__main__':
             print('---\n')
         else:
             print(f'Fant dessverre ingen emner {code} leder til.')
-
-        
-        
-        
