@@ -74,15 +74,4 @@ if __name__ == '__main__':
     courseData['faculty'] = faculties
     courseData['institute'] = institutes
     
-    courseData.to_pickle('data/courses.pkl')
-    #courseData.to_csv('data/courses.csv')
-
-
-
-
-
-
-
-
-
-
+    courseData.to_pickle('courses.pkl')
