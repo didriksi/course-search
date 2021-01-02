@@ -14,3 +14,6 @@ A repeating data pattern is nested lists for course precursors. Here, each eleme
 
 ## Inaccuracies
 Scraping the websites have shown that they are quite inconsistent. The precursor course property interchangeability is especially hard to find, because it is sometimes marked with 'or' and commas, sometimes with a header like 'One of these courses' and then a list, and sometimes implied even more indirectly. There are also at least one example of it not being indicated at all, even though it is obvious through what courses were listed that they were in fact interchangeable. This means that there are some inaccuracies in the data gathered.
+
+## Further work
+I am now working on features for handling not only single courses, but sets of courses. In particular, scraping for requirements for different Master's programs, and checking if a set of courses satisfy those requirements.
