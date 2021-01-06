@@ -5,6 +5,7 @@ Scrape the websites of the University of Oslo to get data on course dependencies
  * `scrapeForCourses` uses the search results at https://www.uio.no/studier/emner/alle/ to make a list of all courses offered, with their respective faculties and institutes.
  * `scrapeEachCourse` goes through the courses gathered, visits each of their course pages, and stores information about the recommended and obligatory precursors.
  * `search` is both an interface, and houses some functions for searching through the course relations. The key feature here is that it can print a list of courses that have a given course as its precursor, along with other precursors of it.
+ * `CourseList` has two classes that deal with lists of courses, and their relationships. It is new, and not yet used anywhere else, but is supposed to replace the data structure described below.
  
 ## Data storage
  The data is stored in a Pandas dataframe, which works reasonably well. I expect performance and readability could be increased by moving to SQL, but since performance isn't a concern due to small data sizes, and SQL set up would require people cloning this repo to set up a server, pandas does well enough.
