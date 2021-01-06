@@ -129,9 +129,8 @@ class CourseListPrimitive:
                         course_list = self._courses
                         regex = self.regexpify(search_query)
 
-                    for course in course_df["coursecode"].str.findall(regex):
-                        if course:
-                            course_list.append(course[0])
+                    indexes = course_df["coursecode"].str.contains(regex)
+                    course_list.extend(list(course_df["coursecode"].loc[indexes]))
 
         return self._courses
 
