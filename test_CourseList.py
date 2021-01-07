@@ -112,6 +112,42 @@ def test_implies():
 
 # TODO: Make tests for: requirements_not_fulfilled_by and assume_taken 
 
+def test_course_combinations():
+    """Test course_combinations method, for both classes."""
+
+    courseList_1 = CourseListPrimitive(coursecode=["MAT1100", "MAT1110", "MAT1120"])
+    assert list(courseList_1.course_combinations) == [("MAT1100", "MAT1110", "MAT1120")]
+
+    expected = [("MAT1100", "MAT1110"), ("MAT1100", "MAT1120"), ("MAT1110", "MAT1120")]
+    assert list((courseList_1*2).course_combinations) == expected, "Couldn't find simple combinations"
+
+    courseList_2 = CourseListPrimitive(coursecode=["STK1100", "STK1110"], quantity=1)
+    compound_1 = courseList_1*2 | courseList_2
+
+    expected = [
+                    ("MAT1100", "MAT1110"),
+                    ("MAT1100", "MAT1120"),
+                    ("MAT1110", "MAT1120"),
+                    ("STK1100",),
+                    ("STK1110",)
+    ]
+    assert list(compound_1.course_combinations) == expected, "Couldn't find compound 'or'-combinations"
+
+    compound_2 = courseList_1 & courseList_2
+    expected = [
+                    ("MAT1100", "MAT1110", "MAT1120", "STK1100"),
+                    ("MAT1100", "MAT1110", "MAT1120", "STK1110")
+    ]
+    assert list(compound_2.course_combinations) == expected, "Couldn't find compound 'and'-combinations"
+
+
+
+
+
+
+
+
+
 
 
 

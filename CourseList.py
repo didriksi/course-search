@@ -1,5 +1,6 @@
 import pandas as pd
 import re
+import itertools
 
 # TODO: Make iterator special method (for course in CourseListPrimitive())
 
@@ -137,10 +138,17 @@ class CourseListPrimitive:
     @property
     def quantity(self):
         """How many of the courses selected by parameters have to be included"""
+        
         if "_quantity" not in self.__dict__:
             self._quantity = len(self.courses)
         
         return self._quantity
+
+    @property
+    def course_combinations(self):
+        """An iterable with all combinations of courses, that satisfy parameters."""
+
+        return itertools.combinations(self.courses, self.quantity)
 
     @staticmethod
     def regexpify(search_query):
@@ -251,33 +259,21 @@ class CourseListPrimitive:
         :return: Bool.
         """
         if isinstance(other, str):
-            return other in self and self.quantity == len(self.courses)
+            return other in self and self.is_simple
 
-        elif isinstance(other, CourseListPrimitive):
-            if self.quantity < other.quantity:
-                return False
-            
-            # Check if there aren't too many unique courses, making as set of
-            # requirements that fulfill other primitive, but not this
-            courses_not_in_other = 0
-            for course in self.courses:
-                if course not in other:
-                    courses_not_in_other += 1
-            if courses_not_in_other <= self.quantity - other.quantity:
-                return True
+        elif isinstance(other, (CourseListPrimitive, CompoundCourseList)):
+            for other_combo in other.course_combinations:
+                for self_combo in self.course_combinations:
+                    for course in other_combo:
+                        if course not in self_combo:
+                            return False
 
-            return False
-        elif isinstance(other, CompoundCourseList):
-            if other.relationship == 'and':
-                for child in other.children:
-                    if not self.implies(child):
-                        return False
-                return True
-            else:
-                for child in other.children:
-                    if self.implies(child):
-                        return True
-                return False
+            return True
+
+        else:
+            raise TypeError("Only accepts other in the form of "
+                            "CourseListPrimitive or CompoundCourseList instances, "
+                            f"not {type(other)}")
 
     def requirements_not_fulfilled_by(self, other):
         """Makes a list of courses that would need to be taken to fulfill requirements.
@@ -288,17 +284,24 @@ class CourseListPrimitive:
         The CourseListPrimitive returned is therefore either a copy of this with the same
         or a lower quantity value, or empty.
 
-        :param other: CourseListPrimitive specifying what courses are to be
-                      checked if fulfill requirements set up by this primitive.
+        :param other: CourseListPrimitive or CompoundCourseList specifying what courses are
+                      to be checked if fulfill requirements set up by this primitive.
 
         :return: CourseListPrimitive of unfulfilled requirements.
         """
-        if isinstance(other, CourseListPrimitive):
-            count = sum([course in other.courses for course in self.courses])
-            return self*(self._quantity - count)
+        if isinstance(other, (CourseListPrimitive, CompoundCourseList)):
+            not_fulfilled = []
+            for other_combo in other.course_combinations:
+                for self_combo in self.course_combinations:
+                    for course in self_combo:
+                        if course not in other_combo:
+                            not_fulfilled.append(course)
         else:
             raise TypeError("Only accepts requirements in the form of "
-                            f"CourseListPrimitive instances, not {type(other)}")
+                            "CourseListPrimitive or CompoundCourseList instances, "
+                            f"not {type(other)}")
+
+        return list(dict.fromkeys(not_fulfilled))
 
     def assume_taken(self, course):
         """Assume a course has been taken, removing it, and reducing quantity by one.
@@ -363,6 +366,36 @@ class CompoundCourseList:
 
         return self._courses
 
+    # TODO: Update self._courses and self._quantity when course is removed
+
+    @staticmethod
+    def _join_product(*iterables):
+        """Helper function for course_combinations
+        
+        Flattens the results of itertools.product.
+        """
+        end_product = []
+        for iterable in iterables:
+            if len(iterable) > 1:
+                end_product.extend(iterable)
+            else:
+                end_product.append(iterable[0])
+        return tuple(end_product)
+
+    @property
+    def course_combinations(self):
+        """An iterable with all combinations of courses that satisfy childrens parameters."""
+        
+        course_combinations_list = [child.course_combinations for child in self.children]
+        
+        if self.relationship == "and":
+            course_combinations_prod = itertools.product(*course_combinations_list)
+            course_combinations_iter = itertools.starmap(self._join_product, course_combinations_prod)
+        else:
+            course_combinations_iter = itertools.chain(*course_combinations_list)
+
+        return course_combinations_iter
+
     def __and__(self, other):
         """Make new CompoundCourseList with 'and' relationship."""
 
@@ -417,31 +450,6 @@ class CompoundCourseList:
         else:
             return False
 
-    def is_fulfilled_by(self, course_list):
-        """Checks if this set of requirements is fulfilled by a primitive.
-
-        It is fulfilled if the courses in the primitive together make the statement
-            'child1 relationship child2 relationship … childn',
-        true. Works recursively.
-
-        :param course_list: CourseListPrimitive. Ignores quantity.
-
-        :return: Bool. If is fulfilled or not.
-        """
-        fulfilled_children = []
-
-        for child in self.children:
-            fulfilled_children.append(
-                child.is_fulfilled_by(course_list)
-            )
-
-        if self.relationship == "and":
-            is_fulfilled = sum(fulfilled_children) == len(self.children)
-        else:
-            is_fulfilled = sum(fulfilled_children) >= 1
-
-        return is_fulfilled
-
     def requirements_not_fulfilled_by(self, course_list):
         """Makes a list of courses that would need to be taken to fulfill requirements.
 
@@ -459,7 +467,8 @@ class CompoundCourseList:
         :return: CompoundCourseList of unfulfilled requirements.
         """
         new_compound = CompoundCourseList(
-            *[child.requirements_not_fulfilled_by(course_list) for child in self.children]
+            *[child.requirements_not_fulfilled_by(course_list) for child in self.children],
+            relationship=self.relationship
         )
         return new_compound
 
