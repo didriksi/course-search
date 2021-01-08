@@ -39,9 +39,10 @@ class CourseListPrimitive:
                quantity: This one is a bit different. If not given it defauls to the amount
                          of courses. If an int is given, it specifies how many courses among
                          the results that have to be taken for the list to be fulfilled.
+               parent: CompoundCourseList instance that houses this primitive.
 
         :raise ValueError: If invalid course_parameter keys are given.
-        :raise TypeError: If course_parameter values aren't lists of strings.
+        :raise TypeError: If course_parameter values aren't of correct types.
         """
         self._course_parameters = course_parameters
 
@@ -58,9 +59,17 @@ class CourseListPrimitive:
             elif param_name == "quantity":
                 if not (param is None or isinstance(param, int)):
                     raise TypeError(f"Quantity must be of type str or None, not {type(param)}")
+            elif param_name == "parent":
+                if not isinstance(param, CompoundCourseList):
+                    raise TypeError(f"Parent must be of type CompoundCourseList, not {type(param)}")
         
         if "quantity" in self._course_parameters:
             self._quantity = self._course_parameters["quantity"]
+
+        if "parent" in self._course_parameters:
+            self.parent = self._course_parameterrs["parent"]
+        else:
+            self.parent = None
 
     @classmethod
     def from_str(cls, str_course_parameters):
@@ -73,6 +82,11 @@ class CourseListPrimitive:
         :return: CourseListPrimitive instance.
         """
         course_parameters = {}
+        
+        quantity_search = re.search(r"(\d+) of ", str_course_parameters)
+        if quantity_search:
+            course_parameters["quantity"] = int(quantity_search.group(1))
+
         regex = r"(\w+)\: ([\w, ]+)"
         for match in re.finditer(regex, str_course_parameters):
             parameter_value = []
@@ -266,16 +280,17 @@ class CourseListPrimitive:
                 for self_combo in self.course_combinations:
                     for course in other_combo:
                         if course not in self_combo:
-                            return False
+                            break
+                    return True
 
-            return True
+            return False
 
         else:
             raise TypeError("Only accepts other in the form of "
                             "CourseListPrimitive or CompoundCourseList instances, "
                             f"not {type(other)}")
 
-    def requirements_not_fulfilled_by(self, other):
+    def requirements_not_implied_by(self, other):
         """Makes a list of courses that would need to be taken to fulfill requirements.
 
         This primitives requirements is fulfilled if the courses in the other primitive
@@ -289,19 +304,54 @@ class CourseListPrimitive:
 
         :return: CourseListPrimitive of unfulfilled requirements.
         """
-        if isinstance(other, (CourseListPrimitive, CompoundCourseList)):
-            not_fulfilled = []
-            for other_combo in other.course_combinations:
-                for self_combo in self.course_combinations:
-                    for course in self_combo:
-                        if course not in other_combo:
-                            not_fulfilled.append(course)
-        else:
-            raise TypeError("Only accepts requirements in the form of "
+        if not isinstance(other, (CourseListPrimitive, CompoundCourseList)):
+            raise TypeError("Only accepts course lists in the form of "
                             "CourseListPrimitive or CompoundCourseList instances, "
                             f"not {type(other)}")
 
-        return list(dict.fromkeys(not_fulfilled))
+        not_fulfilled = []
+        for other_combo in other.course_combinations:
+            for self_combo in self.course_combinations:
+                part = [course for course in self_combo if course not in other_combo]
+                if part:
+                    not_fulfilled.append(part)
+                else:
+                    return CourseListPrimitive()
+
+        if len(not_fulfilled) == 1:
+            course_list = CourseListPrimitive(coursecode=not_fulfilled[0])
+        else:
+            course_list = CompoundCourseList.from_nested_list(not_fulfilled,
+                                                              relationship="or")
+            course_list.simplify()
+            
+        return course_list
+
+    def combinations_that_fulfill(self, other):
+        """Finds the course combinations from another list, that fulfills self.
+
+        Uses other.course_combinations, and returns all combinations that makes the
+        self evaluate as True.
+
+        :param other: CourseListPrimitive or CompoundCourseList.
+
+        :return: CompoundCourseList with all valid combinations.
+        """
+        if not isinstance(other, (CourseListPrimitive, CompoundCourseList)):
+            raise TypeError("Only accepts course lists in the form of "
+                            "CourseListPrimitive or CompoundCourseList instances, "
+                            f"not {type(other)}")
+
+        valid_combinations = []
+        for other_combo in other.course_combinations:
+            for self_combo in self.course_combinations:
+                for course in other_combo:
+                    if course not in self_combo:
+                        break
+                valid_combinations.append(other_combo)
+
+        return CompoundCourseList.from_nested_list(valid_combinations, relationship="or")
+
 
     def assume_taken(self, course):
         """Assume a course has been taken, removing it, and reducing quantity by one.
@@ -321,15 +371,28 @@ class CourseListPrimitive:
             properties.append(f"Institute: {', '.join(self._course_parameters['institute'])}")
         if "coursecode" in self._course_parameters:
             properties.append(f"Coursecode: {', '.join(self._course_parameters['coursecode'])}")
-        if "course_regexp" in self._course_parameters:
-            properties.append(f"Regexp requirement: {self._course_parameters['course_regexp']}")
+        if "search" in self._course_parameters:
+            properties.append(f"Regexp requirement: {self._course_parameters['search']}")
+        if "quantity" in self._course_parameters:
+            quantity = f"{self._course_parameters['quantity']} of "
+        else:
+            quantity = "all of "
 
-        return f"[{'. '.join(properties)}]"
+
+        return f"{quantity}[{'. '.join(properties)}]"
+
+    def simplify(self):
+        """Simplifies the primitive, making its parameters simpler if possible"""
+        # TODO: Make primitives version of this method do course parameter
+        #       simplification based on courses
+
+        # Not implemented yet
+        pass
 
 
 
 class CompoundCourseList:
-    def __init__(self, *course_lists, relationship="and"):
+    def __init__(self, *course_lists, relationship="and", parent=None):
         """A set of CourseListPrimitives, or other CompoundCourseLists, with a logic relationship.
 
         The relationship can be either 'and' or 'or', and 
@@ -352,9 +415,56 @@ class CompoundCourseList:
                                 f" or CourseListPrimitives, not {type(course_list)}")
 
         self.children = course_lists
+        for child in self.children:
+            child.parent = self
+            
         self.relationship = relationship
 
-    # TODO: Make from_str factory method
+        self.parent = parent
+
+    @classmethod
+    def from_nested_list(cls, nested_list, **kwargs):
+        """Factory method for instantiating through the old style nested lists.
+
+        :param nested_list: List of coursecodes in a nested list. List looks like
+            [['either this course', 'or this'], ['also either this', 'or this'], 'and this']
+
+        :param **kwargs: Passed to __init__.
+
+        :return: CompoundCourseList instance.
+        """
+        primitives, obligatory = [], []
+        for element in nested_list:
+            if isinstance(element, list):
+                primitives.append(
+                    CourseListPrimitive(coursecode=element, quantity=1)
+                )
+            else:
+                obligatory.append(element)
+        primitives.append(CourseListPrimitive(coursecode=obligatory, parent=self))
+
+        return cls(*primitives, **kwargs)
+
+    @classmethod
+    def from_str(cls, str_course_parameters):
+        """Factory method for creating instance based on string representation.
+
+        :param str_course_parameters: Can be constructed by str(self), and is useful
+                                      because it allows instance to be saved as a string,
+                                      without needing unsafe eval() to reinstantiate.
+        
+        :return: CompoundCourseList instance.
+        """
+        course_parameters = {}
+        regex = r"\[([\w\: ,.]+)\] ?(and|or)?"
+        for match in re.finditer(regex, str_course_parameters):
+            new_primitive = CourseListPrimitive.from_str(match.group(1))
+            new_primitive.parent = self
+            primitives.append(new_primitive)
+            if len(match.groups()) == 2:
+                relationship = match.group(2)
+
+        return cls(*primitives, relationship=relationship)
 
     @property
     def courses(self):
@@ -450,7 +560,7 @@ class CompoundCourseList:
         else:
             return False
 
-    def requirements_not_fulfilled_by(self, course_list):
+    def requirements_not_implied_by(self, course_list):
         """Makes a list of courses that would need to be taken to fulfill requirements.
 
         This objects stipulated requirements is fulfilled if the courses in the primitive
@@ -467,9 +577,10 @@ class CompoundCourseList:
         :return: CompoundCourseList of unfulfilled requirements.
         """
         new_compound = CompoundCourseList(
-            *[child.requirements_not_fulfilled_by(course_list) for child in self.children],
+            *[child.requirements_not_implied_by(course_list) for child in self.children],
             relationship=self.relationship
         )
+        new_compound.simplify()
         return new_compound
 
     def implies(self, other):
@@ -492,101 +603,123 @@ class CompoundCourseList:
                           CompoundCourseList.
         """
         if isinstance(other, str):
-            other = CourseListPrimitive(coursecode = other)
+            other = CourseListPrimitive(coursecode=other)
             if not other:
                 raise ValueError(f"Not valid course.")
-        elif isinstance(other, CourseListPrimitive):
-            if self.relationship == "and":
-                for child in self.children:
-                    if child.implies(other):
-                        return True
+            self.implies(other)
 
-                # This is a bit hacky, and could probably be done smoother
-                guaranteed_courses = []
-                for child in self.children:
-                    if len(child.courses) == child.quantity:
-                        guaranteed_courses.extend(child.courses)
-                self_guaranteed = CourseListPrimitive(coursecode=guaranteed_courses)
-                if self_guaranteed.implies(other):
+        elif isinstance(other, (CourseListPrimitive, CompoundCourseList)):
+            for other_combo in other.course_combinations:
+                for self_combo in self.course_combinations:
+                    for course in other_combo:
+                        if course not in self_combo:
+                            break
                     return True
 
-                # TODO: Make combinatorically complicated test for other options 
-                return False
-            else:
-                for child in self.children:
-                    if not child.implies(other):
-                        return False
-                return True
             return False
-        elif isinstance(other, CompoundCourseList):
-            if other.relationship == "and":
-                for child in other.children:
-                    if not self.implies(child):
-                        return False
-                return True
-            else:
-                for child in other.children:
-                    if self.implies(child):
-                        return True
-                return False
+
         else:
-            raise TypeError("Only accepts str, CourseListPrimitive and CompoundCourseList, "
+            raise TypeError("Only accepts other in the form of "
+                            "CourseListPrimitive or CompoundCourseList instances, "
                             f"not {type(other)}")
 
-    def simplify(self):
-        """Simplifies the tree structure, removing redundancy.
+    @property
+    def primitives(self):
+        """List of all CourseListPrimitives at the leaves of the tree"""
+        primitives = []
+        for child in self.children:
+            if isinstance(child, CourseListPrimitive):
+                primitives.append(child)
+            else:
+                primitives.extend(child.primitives)
 
-        This is not able to remove tier-differing redundancy, where an overlapping
-        set of requirements is given in two different levels of the tree.
-        """
-        for i, child in enumerate(self.children):
+        return primitives
+
+    @property
+    def compounds(self):
+        """List of all CompoundCourseLists in the tree"""
+        compounds = []
+        for child in self.children:
             if isinstance(child, CompoundCourseList):
-                child.simplify()
+                compounds.append(child)
+                compounds.extend(child.compounds)
 
-                if len(child) == 1:
-                    # Make it a primitive if it has only one child
-                    child = child.children[0]
-                    self.children[i] = child
+        return compounds
 
-                # Remove children that imply other children
-                # TODO: Figure out if this is the same as the similar thing
-                #       in implies
-                if self.relationship == "or" and child.relationship == "or":
-                    for e, grandchild in enumerate(child.children):
-                        for j, other_child in enumerate(self.children):
-                            if i != j:
-                                if other_child.implies(grandchild):
-                                    self.remove(grandchild)
+    @property
+    def relationships(self):
+        """List of all relationships between itself and the root"""
+        relationships = []
+        if parent is not none:
+            relationships = [parent.relationship]
+            relationships.extend(parent.relationships)
 
-            if child:
-                # Compare it with its siblings
-                for other_child in self.children[:i]:
-                    if other_child.implies(child):
-                        self.remove(child)
-                    elif child.implies(other_child):
-                        self.remove(other_child)
+        return relationships
 
-                    if self.relationship == "and":
-                        if other_child.is_simple:
-                            for course in other_child.courses:
-                                if course in child:
-                                    child.assume_taken(course)
-                        if child.is_simple:
-                            for course in child.courses:
-                                if course in other_child:
-                                    other_child.assume_taken(course)
-            
-            if not child:
-                # Remove empty children
-                self.remove(child)
+    def simplify(self):
+        """Simplifies the tree structure, removing redundancy."""
+
+        for compound in self.compounds:
+            # Makes compounds that could be represented as primitives, primitives
+            if compound.is_simple:
+                compound.parent.add(
+                    CourseListPrimitive(coursecode=compound.courses)
+                )
+                compound.parent.remove(compound)
+            elif len(compound) == 1:
+                compound.parent.add(compound.children[0])
+                compound.parent.remove(compound)
+            # Merges primitives where possible, and removes low hanging redundancy
+            else:
+                simples = [child for child in compound.children if child.is_simple]
+                if len(simples) > 1:
+                    simple_courses = []
+                    for simple in simples:
+                        compound.remove(simple)
+                        simple_courses.append(simple.courses)
+
+                    simple_course_list = CourseListPrimitive(coursecode=simple_courses)
+                    
+                    for child in compound.children:
+                        child.assume_taken(simple_course_list)
+
+                    compound.children.append(simple_course_list)
+
+        # If one compound implies another, and the implying one has to be fulfilled
+        # for the root to be fulfilled, assume the implied one is also fulfilled
+        for compound_1, compound_2 in itertools.combinations(self.compounds, 2):
+            if "or" not in compound_1.relations:
+                consecutive_ors = 0
+                for rel in compound_2.relationships:
+                    if rel == "or":
+                        consecutive_ors += 1
+                    else:
+                        break
+                if consecutive_ors and compound_1.implies(compound_2):
+                    for level in range(consecutive_ors):
+                        compound_2.parent.remove(compound_2)
+                        compound_2 = compound_2.parent
+
+        # Tries to make course parameters tighter
+        for primitive in self.primitives:
+            primitive.simplify()
+
+    def add(self, child):
+        """Add a child"""
+
+        self.children.append(child)
 
     def remove(self, child):
         """Removes a child.
 
         :param child: CourseListPrimitive or CompoundCourseList, in self.children.
-        """
 
-        self.children.remove(child)
+        :raise AttributeError: if child has no parent property.
+        """
+        if child.parent is not None:
+            child.parent.remove(child)
+        else:
+            raise AttributeError("Child has no parent, and can't be deleted from anywhere")
 
     def assume_taken(self, course):
         """Assume a course has been taken, removing it from children.

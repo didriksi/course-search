@@ -53,7 +53,7 @@ def test_CourseListPrimitive_str():
 
     Implicitly and poorly also tests __eq__ and __hash__"""
 
-    course_parameters = {"faculty": ["hf", "sv"], "coursecode": ["FIL1000"]}
+    course_parameters = {"faculty": ["hf", "sv"], "coursecode": ["FIL1000"], "quantity": 2}
     courseList = CourseListPrimitive(**course_parameters)
     str_course_parameters = str(courseList)
     strCourseList = CourseListPrimitive.from_str(str_course_parameters)
