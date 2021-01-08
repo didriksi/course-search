@@ -4,7 +4,9 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import pandas as pd
+
 from scrapeForCourses import make_soup
+from CourseList import CourseListPrimitive, CompoundCourseList
 
 def is_clean(string):
     """Checks if string has no very special characters.
@@ -173,8 +175,8 @@ if __name__ == '__main__':
         obligatories.append(obligatory)
         recommendeds.append(recommended)
 
-    courseData['obligatory'] = obligatories
-    courseData['recommended'] = recommendeds
+    courseData['obligatory'] = str(CompoundCourseList.from_nested_list(obligatories))
+    courseData['recommended'] = str(CompoundCourseList.from_nested_list(recommendeds))
 
     courseData.to_pickle('courses.pkl')
 
