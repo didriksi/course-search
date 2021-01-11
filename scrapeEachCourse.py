@@ -145,13 +145,13 @@ def get_prerequisites(content_tag):
         coursecodes, course_relations = get_courses(pure_text[obligatory_start:obligatory_end])
         obligatory_list = make_courselist(coursecodes, course_relations)
     else:
-        obligatory_list = '0'
+        obligatory_list = []
 
     if ((recommended_start, recommended_end) != (-2, -1)):
         coursecodes, course_relations = get_courses(pure_text[recommended_start:recommended_end])
         recommended_list = make_courselist(coursecodes, course_relations)
     else:
-        recommended_list = '0'
+        recommended_list = []
 
     return obligatory_list, recommended_list
 
@@ -172,11 +172,11 @@ if __name__ == '__main__':
 
         content = course_soup.find(id='vrtx-course-content')
         obligatory, recommended = get_prerequisites(content)
-        obligatories.append(obligatory)
-        recommendeds.append(recommended)
+        obligatories.append(obligatory if obligatory else "")
+        recommendeds.append(recommended if recommended else "")
 
-    courseData['obligatory'] = str(CompoundCourseList.from_nested_list(obligatories))
-    courseData['recommended'] = str(CompoundCourseList.from_nested_list(recommendeds))
+    courseData['obligatory'] = obligatories
+    courseData['recommended'] = recommendeds
 
     courseData.to_pickle('courses.pkl')
 
