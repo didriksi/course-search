@@ -414,10 +414,10 @@ class CompoundCourseList:
                 raise TypeError("Can only create CompoundCourseList from other CompoundCourseLists"
                                 f" or CourseListPrimitives, not {type(course_list)}")
 
-        self.children = course_lists
+        self.children = list(course_lists)
         for child in self.children:
             child.parent = self
-            
+
         self.relationship = relationship
 
         self.parent = parent
@@ -441,7 +441,7 @@ class CompoundCourseList:
                 )
             else:
                 obligatory.append(element)
-        primitives.append(CourseListPrimitive(coursecode=obligatory, parent=self))
+        primitives.append(CourseListPrimitive(coursecode=obligatory))
 
         return cls(*primitives, **kwargs)
 
@@ -532,7 +532,7 @@ class CompoundCourseList:
 
     def __str__(self):
         """Prints out relationships between all children, and their contents"""
-        return "{" + f" {f' {self.relationship} '.join([str(child) for child in self.children])}" + "}"
+        return f"{f' {self.relationship} '.join([str(child) for child in self.children])}"
 
     def __len__(self):
         """Returns number of primitives and compounds in this compound.
@@ -540,6 +540,9 @@ class CompoundCourseList:
         Also deals with bool, because bool(Object) == False if len(Object) == 0.
         """
         return len(self.children)
+
+    def __bool__(self):
+        return bool(self.courses)
 
     def __hash__(self):
         """Hashes, makes a unique int, that represents the courses and quantity"""
@@ -676,7 +679,7 @@ class CompoundCourseList:
                     simple_courses = []
                     for simple in simples:
                         compound.remove(simple)
-                        simple_courses.append(simple.courses)
+                        simple_courses.extend(simple.courses)
 
                     simple_course_list = CourseListPrimitive(coursecode=simple_courses)
                     
@@ -703,6 +706,8 @@ class CompoundCourseList:
         # Tries to make course parameters tighter
         for primitive in self.primitives:
             primitive.simplify()
+            if not primitive:
+                self.remove(primitive)
 
     def add(self, child):
         """Add a child"""
@@ -717,7 +722,7 @@ class CompoundCourseList:
         :raise AttributeError: if child has no parent property.
         """
         if child.parent is not None:
-            child.parent.remove(child)
+            child.parent.children.remove(child)
         else:
             raise AttributeError("Child has no parent, and can't be deleted from anywhere")
 

@@ -4,6 +4,8 @@ import pandas as pd
 import re
 import itertools
 
+from CourseList import CourseListPrimitive, CompoundCourseList
+
 def code_in(course, courselist):
     """Check if course is in nested list, and return list of other courses in that list.
 
@@ -186,40 +188,85 @@ def search_single_course(course, course_df, flags):
         if flag == 'compact' or flag == 'c':
             text_index = 1
         elif flag == 'roots' or flag == 'r':
-            messy_roots = grow_roots(course, [], course_df)[0:2]
-            untangled_roots = untangle_roots(messy_roots)
-            print(
-                text_from_courselist(
-                    f"For å ta {course} må du først ta ",
-                    untangled_roots,
-                    '.',
-                    errortext='Fant ingen obligatoriske forkunnskapskrav.'
-                )
-            )
+            messy_roots = grow_roots(course, [], course_df)[:2]
+            compound_obligatory = CompoundCourseList.from_nested_list(messy_roots[0])
+            compound_recommended = CompoundCourseList.from_nested_list(messy_roots[1])
+
+            compound_obligatory.simplify()
+            compound_recommended.simplify()
+
+            if compound_obligatory and compound_recommended:
+                print(f"For å ta {course} må du først ta {compound_obligatory},"
+                      f"og det anbefales også at du tar {compound_recommended}")
+            elif compound_obligatoy:
+                print(f"For å ta {course} må du først ta {compound_obligatory}.")
+            elif compound_recommended:
+                print(f"For å ta {course} anbefales de å ta {compound_obligatory}.")
+            else:
+                print(f"Finner ingen forkunnskapskrav til {course}")
 
     results = False
     print(f'\n---\nSøker etter emner {course} peker mot...')
+
+    course_primitive = CourseListPrimitive(coursecode=[course])
+    if not course_primitive:
+        print("Couldn't find a course with that course code, please try another.")
+        return results
+
+    total_text = ['\nEmnet ', '']
+
     for index, other_course_row in course_df.iterrows():
-        total_text = ['\nEmnet ', '']
-        obligatory_list = code_in(course, other_course_row['obligatory'])
-        recommended_list = code_in(course, other_course_row['recommended'])
-        if obligatory_list:
-            total_text[0] += f"leder til {other_course_row['coursecode']} - {other_course_row['coursename']}{text_from_courselist(', hvis du også tar ', obligatory_list, '')}."
+
+        obligatory = False
+        if course in other_course_row['obligatory']:
+            obligatory = True
+        else:
+            for element in other_course_row['obligatory']:
+                if isinstance(element, list) and course in element:
+                    obligatory = True
+
+        recommended = False
+        if course in other_course_row['recommended']:
+            recommended = True
+        else:
+            for element in other_course_row['recommended']:
+                if isinstance(element, list) and course in element:
+                    recommended = True
+        
+
+        if obligatory:
+            obligatory_compound = CompoundCourseList.from_nested_list(other_course_row['obligatory'])
+            not_done = obligatory_compound.requirements_not_implied_by(course_primitive)
+            not_done.simplify()
+
+            total_text[0] += f"Leder til {other_course_row['coursecode']} - {other_course_row['coursename']}"\
+                           + f"{f', hvis du også tar {not_done}' if not_done else ''}."
             total_text[1] += f"{other_course_row['coursecode']} - {other_course_row['coursename']} (obligatorisk)"
-            if recommended_list:
-                total_text[0] += text_from_courselist('', recommended_list, ' er anbefalte forkunnskaper.')
-        elif recommended_list:
-            total_text[0] += f"er en anbefalt forkunnskap til {other_course_row['coursecode']} - {other_course_row['coursename']}{text_from_courselist(', sammen med ', recommended_list, '')}.{text_from_courselist(' Den obligatoriske forkunnskapen får du gjennom ', other_course_row['obligatory'], '.')}"
+
+            recommended_compound = CompoundCourseList.from_nested_list(other_course_row['recommended'])
+            total_text[0] += f"\n{recommended_compound} er anbefalt forkunnskaper." if recommended_compound else ""
+            total_text[0] += "\n\n"
+            total_text[1] += "\n"
+
+        elif recommended:
+            recommended_compound = CompoundCourseList.from_nested_list(other_course_row['obligatory'])
+            not_done = recommended_compound.requirements_not_implied_by(course_primitive)
+            not_done.simplify()
+            total_text[0] += f"Er en anbefalt forkunnskap til {other_course_row['coursecode']} - {other_course_row['coursename']}"\
+                           + f"{f', sammen med {not_done}' if not_done else ''}."
+
             total_text[1] += f"{other_course_row['coursecode']} - {other_course_row['coursename']} (anbefalt)"
 
-        chosen_text = total_text[text_index]
-        
-        if total_text[0] != '\nEmnet ':
-            results = True
-            print(chosen_text)
+            obligatory_compound = CompoundCourseList.from_nested_list(other_course_row['obligatory'])
+            total_text[0] += f"\n{obligatory_compound} er den nødvendige forkunnskapen." if obligatory_compound else ""
+            total_text[0] += "\n\n"
+            total_text[1] += "\n"
+
+    chosen_text = total_text[text_index]
     
-    if results:
-        print('\n---\n')
+    if total_text[0] != '\nEmnet ':
+        results = True
+        print(chosen_text, "\n\n---\n")
     else:
         print(f'Fant dessverre ingen emner {course} leder til.')
 
